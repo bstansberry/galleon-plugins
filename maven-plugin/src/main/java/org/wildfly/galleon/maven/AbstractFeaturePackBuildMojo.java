@@ -174,7 +174,7 @@ public abstract class AbstractFeaturePackBuildMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         try {
-            artifactVersions = MavenProjectArtifactVersions.getInstance(project);
+            artifactVersions = MavenProjectArtifactVersions.getInstance(project, getSourceArtifacts());
             doExecute();
         } catch (RuntimeException | Error | MojoExecutionException | MojoFailureException e) {
             throw e;
@@ -343,6 +343,10 @@ public abstract class AbstractFeaturePackBuildMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new MojoExecutionException("Failed to create a feature-pack archives from the layout", e);
         }
+    }
+
+    protected Set<ArtifactItem> getSourceArtifacts() {
+        return Collections.emptySet();
     }
 
     private void addConfigPackages(final Path configDir, final Path packagesDir, final FeaturePackDescription.Builder fpBuilder) throws MojoExecutionException {
@@ -688,7 +692,7 @@ public abstract class AbstractFeaturePackBuildMojo extends AbstractMojo {
 
     private void buildArtifactList(ArtifactListBuilder builder) throws MojoExecutionException {
         try {
-            final MavenProjectArtifactVersions projectArtifacts = MavenProjectArtifactVersions.getInstance(project);
+            final MavenProjectArtifactVersions projectArtifacts = MavenProjectArtifactVersions.getInstance(project, getSourceArtifacts());
             Set<String> allArtifacts = new TreeSet<>();
             addHardCodedArtifacts(allArtifacts);
             allArtifacts.addAll(projectArtifacts.getArtifacts().values());

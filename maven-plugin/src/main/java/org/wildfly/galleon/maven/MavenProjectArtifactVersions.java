@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.maven.artifact.Artifact;
@@ -39,14 +40,19 @@ class MavenProjectArtifactVersions {
     private static final String SYSTEM = "system";
 
     static MavenProjectArtifactVersions getInstance(MavenProject project) {
-        return new MavenProjectArtifactVersions(project);
+        return new MavenProjectArtifactVersions(project, Collections.emptySet());
+    }
+
+    static MavenProjectArtifactVersions getInstance(MavenProject project, Set<ArtifactItem> sourceArtifacts) {
+        return new MavenProjectArtifactVersions(project, sourceArtifacts);
     }
 
     private final Map<String, String> versions = new TreeMap<>();
 
-    private MavenProjectArtifactVersions(MavenProject project) {
+    private MavenProjectArtifactVersions(MavenProject project, Set<ArtifactItem> sourceArtifacts) {
         for (Artifact artifact : project.getArtifacts()) {
-            if (TEST_JAR.equals(artifact.getType()) || SYSTEM.equals(artifact.getScope())) {
+            if (TEST_JAR.equals(artifact.getType()) || SYSTEM.equals(artifact.getScope())
+                    || sourceArtifacts.contains(new ArtifactItem(artifact))) {
                 continue;
             }
             put(artifact.getGroupId(), artifact.getArtifactId(), artifact.getClassifier(), artifact.getVersion(), artifact.getType());
@@ -71,6 +77,15 @@ class MavenProjectArtifactVersions {
             versionClassifier.append(classifier);
         }
         versions.put(buf.toString(), versionClassifier.append(':').append(type).toString());
+    }
+
+    private String createArtifactKey(final String groupId, final String artifactId, final String classifier, final String version, final String type) {
+        final StringBuilder buf = new StringBuilder(groupId).append(':').
+                append(artifactId);
+        if(classifier != null && !classifier.isEmpty()) {
+            buf.append("::").append(classifier);
+        }
+        return buf.toString();
     }
 
     void remove(String groupId, String artifactId) {

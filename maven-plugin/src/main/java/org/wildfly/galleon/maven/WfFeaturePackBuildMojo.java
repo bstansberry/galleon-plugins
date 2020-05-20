@@ -21,6 +21,8 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,17 +30,26 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.DefaultProjectBuildingRequest;
+import org.apache.maven.project.ProjectBuildingRequest;
+import org.apache.maven.shared.artifact.resolve.ArtifactResolverException;
+import org.apache.maven.shared.artifact.resolve.ArtifactResult;
 import org.jboss.galleon.Constants;
 import org.jboss.galleon.Errors;
 import org.jboss.galleon.layout.FeaturePackDescription;
@@ -49,6 +60,7 @@ import org.jboss.galleon.universe.FeaturePackLocation;
 import org.jboss.galleon.util.IoUtils;
 import org.jboss.galleon.util.CollectionUtils;
 import org.jboss.galleon.util.PathFilter;
+import org.jboss.galleon.util.ZipUtils;
 import org.wildfly.galleon.plugin.WfConstants;
 
 /**
@@ -77,6 +89,10 @@ public class WfFeaturePackBuildMojo extends AbstractFeaturePackBuildMojo {
                 return name.endsWith(".sh") || name.endsWith(".conf");
         }
     };
+
+    /** Directories in a source zip we're willing to copy in */
+    private static List<String> SOURCE_RESOURCE_TYPES = Arrays.asList(WfConstants.CONFIGS, WfConstants.CONTENT,
+            WfConstants.FEATURE_GROUPS, WfConstants.LAYERS, WfConstants.MODULES, WfConstants.PACKAGES);
 
     /**
      * The feature-pack build configuration file.
@@ -140,6 +156,9 @@ public class WfFeaturePackBuildMojo extends AbstractFeaturePackBuildMojo {
     @Parameter(alias = "feature-specs-output", defaultValue = "${project.build.directory}/resources/features", required = true)
     protected File featureSpecsOutput;
 
+    @Parameter(alias = "source-artifacts", readonly = false, required = false)
+    private List<ArtifactItem> sourceArtifacts = Collections.emptyList();
+
     private WildFlyFeaturePackBuild buildConfig;
     private Map<String, PackageSpec.Builder> extendedPackages = Collections.emptyMap();
 
@@ -150,6 +169,7 @@ public class WfFeaturePackBuildMojo extends AbstractFeaturePackBuildMojo {
     @Override
     protected void doExecute() throws MojoExecutionException, MojoFailureException {
         final Path targetResources = Paths.get(buildName, Constants.RESOURCES);
+        installSourceArtifacts(targetResources);
         final Path specsDir = configDir.getAbsoluteFile().toPath().resolve(resourcesDir);
         if (Files.exists(specsDir)) {
             try {
@@ -241,6 +261,72 @@ public class WfFeaturePackBuildMojo extends AbstractFeaturePackBuildMojo {
         }
 
         buildFeaturePack(fpBuilder, buildConfig);
+    }
+
+    @Override
+    protected Set<ArtifactItem> getSourceArtifacts() {
+        return sourceArtifacts == null || sourceArtifacts.isEmpty() ? Collections.emptySet() : new HashSet<>(sourceArtifacts);
+    }
+
+    private void installSourceArtifacts(Path targetResources) throws MojoExecutionException {
+        if (sourceArtifacts != null) {
+            for (ArtifactItem artifactItem : sourceArtifacts) {
+                Artifact artifact = findArtifact(artifactItem);
+                if (artifact == null) {
+                    throw new MojoExecutionException(String.format("Couldn't resolve source artifact %s", artifactItem));
+                }
+                Path source = artifact.getFile().toPath();
+                try (FileSystem jarFS = FileSystems.newFileSystem(source, null)) {
+                    // TODO consider just unzipping and then deleting known unwanted stuff like META-INF
+                    for (String sourceType : SOURCE_RESOURCE_TYPES) {
+                        unzipToTargetResources(jarFS, sourceType, true, targetResources);
+                    }
+                    unzipToTargetResources(jarFS, WfConstants.WILDFLY_FEATURE_PACK_BUILD, false, targetResources);
+                } catch (IOException e) {
+                    throw new MojoExecutionException(String.format("Couldn't unzip %s to %s", source, targetResources), e);
+                }
+            }
+        }
+    }
+
+    private void unzipToTargetResources(FileSystem jarFS, String relativePath, boolean isDirectory, Path targetResources) throws IOException {
+        final Path typePath = jarFS.getPath(relativePath);
+        if (Files.exists(typePath)) {
+            final Path destPath = targetResources.resolve(relativePath);
+            if (isDirectory) {
+                Files.createDirectories(destPath);
+            } else {
+                Files.createDirectories(targetResources);
+            }
+            ZipUtils.copyFromZip(typePath.toAbsolutePath(), destPath);
+            getLog().debug("Copied " + typePath + " to " + destPath);
+        } else {
+            getLog().debug(typePath + " does not exist in " + jarFS);
+        }
+    }
+
+    private Artifact findArtifact(ArtifactItem artifact) throws MojoExecutionException {
+        resolveVersion(artifact);
+        try {
+            ProjectBuildingRequest buildingRequest
+                    = new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
+            buildingRequest.setLocalRepository(session.getLocalRepository());
+            buildingRequest.setRemoteRepositories(project.getRemoteArtifactRepositories());
+            debug("Resolving artifact %s:%s:%s", artifact.getGroupId(), artifact.getArtifactId(), artifact.getVersion());
+            final ArtifactResult result = artifactResolver.resolveArtifact(buildingRequest, artifact);
+            return result == null ? null : result.getArtifact();
+        } catch (ArtifactResolverException e) {
+            throw new MojoExecutionException("Couldn't resolve artifact: " + e.getMessage(), e);
+        }
+    }
+
+    private void resolveVersion(ArtifactItem artifact) {
+        if(artifact.getVersion() == null) {
+            Artifact managedArtifact = this.project.getManagedVersionMap().get(artifact.getGroupId() + ':' + artifact.getArtifactId() + ':' + artifact.getType());
+            if(managedArtifact != null) {
+                artifact.setVersion(managedArtifact.getVersion());
+            }
+        }
     }
 
     private PackageSpec.Builder getExtendedPackage(String name, boolean create) {

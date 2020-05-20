@@ -31,6 +31,7 @@ public interface WfConstants {
     String ARTIFACT_VERSIONS_PROPS = "artifact-versions.properties";
     String BASE = "base";
     String CONFIG = "config";
+    String CONFIGS = "configs";
     String CONFIGURATION = "configuration";
     String CONTENT = "content";
     String DOCS = "docs";
@@ -41,6 +42,7 @@ public interface WfConstants {
     String EXTENSIONS_DOMAIN = "extensions-domain";
     String EXTENSIONS_HOST = "extensions-host";
     String EXTENSIONS_STANDALONE = "extensions-standalone";
+    String FEATURE_GROUPS = "feature_groups";
     String GALLEON_PASSIVE = "galleon.passive";
     String HOST = "host";
     String LAYOUT = "layout";
@@ -50,6 +52,7 @@ public interface WfConstants {
     String MODULE_XML = "module.xml";
     String MODULES = "modules";
     String MODULES_ALL = "modules.all";
+    String PACKAGES = "packages";
     String PM = "pm";
     String PROFILE = "profile";
     String SCHEMA = "schema";
@@ -62,6 +65,7 @@ public interface WfConstants {
     String UTF8 = "UTF-8";
     String VALUE = "value";
     String WILDFLY = "wildfly";
+    String WILDFLY_FEATURE_PACK_BUILD = "wildfly-feature-pack-build.xml";
     String WILDFLY_TASKS_PROPS = "wildfly-tasks.properties";
     String WILDFLY_TASKS_XML = "wildfly-tasks.xml";
 
