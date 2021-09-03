@@ -294,6 +294,11 @@ public class FeatureSpecGeneratorInvoker {
             }
         }
 
+        if (!buildConfig.hasStandaloneExtensions() && !buildConfig.hasDomainExtensions() && !buildConfig.hasHostExtensions()) {
+            // no specs to generate; we were called just for transformation
+            assert jakartaTransform;
+            return 0;
+        }
         addBasicConfigs();
 
         final String originalMavenRepoLocal = System.getProperty(MAVEN_REPO_LOCAL);

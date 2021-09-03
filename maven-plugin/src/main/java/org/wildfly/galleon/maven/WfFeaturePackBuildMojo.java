@@ -207,7 +207,7 @@ public class WfFeaturePackBuildMojo extends AbstractFeaturePackBuildMojo {
         // feature-pack build config
         buildConfig = getBuildConfig();
 
-        if(buildConfig.hasStandaloneExtensions() || buildConfig.hasDomainExtensions() || buildConfig.hasHostExtensions()) {
+        if(jakartaTransform || buildConfig.hasStandaloneExtensions() || buildConfig.hasDomainExtensions() || buildConfig.hasHostExtensions()) {
             new FeatureSpecGeneratorInvoker(this).execute();
         }
 
