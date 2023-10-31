@@ -123,8 +123,12 @@ public class ModuleXmlVersionResolver {
                 if (artifactCoords != null) {
                     Artifact artifact = artifacts.get(artifactCoords);
                     if (artifact == null) {
+                        log.info("Can't resolve " + artifactName + " using artifactCoords " + artifactCoords + " from " + artifacts);
                         throw new MojoExecutionException("Couldn't locate artifact in the dependencies " + artifactCoords);
                     } else {
+                        if (artifactName.equals("${org.wildfly:wildfly-opentelemetry}")) {
+                            log.info("Resolved " + artifactName + " using artifactCoords " + artifactCoords + " from " + artifacts);
+                        }
                         StringJoiner joiner = new StringJoiner(":");
                         joiner.add(artifact.getGroupId());
                         joiner.add(artifact.getArtifactId());

@@ -189,11 +189,14 @@ public class FeatureSpecGeneratorInvoker {
         for (Artifact artifact : MavenProjectArtifactVersions.getFilteredArtifacts(project, buildConfig)) {
             registerArtifact(artifact, null);
         }
+        log.info("mergedArtifacts after registerArtifact calls -- " + mergedArtifacts);
 
         final Path projectResources = Paths.get(project.getBuild().getDirectory()).resolve("resources");
         final Path packagesDir = projectResources.resolve(Constants.PACKAGES);
         if (Files.exists(packagesDir)) {
+            log.info("calling findAndCopyModules for feature pack packages");
             findAndCopyModules(packagesDir, mergedArtifacts);
+            log.info("mergedArtifacts after findAndCopyModules call -- " + mergedArtifacts);
             // layers.conf
             Path fpLayersConf = packagesDir.resolve(WfConstants.LAYERS_CONF);
             if (Files.exists(fpLayersConf)) {
@@ -216,14 +219,19 @@ public class FeatureSpecGeneratorInvoker {
 
         final Path projectModules = projectResources.resolve(MODULES);
         if(Files.exists(projectModules)) {
+            log.info("calling copyModules from " + projectModules + " using" + projectModules.getClass());
             copyModules(projectModules, mergedArtifacts);
         }
+        log.info("mergedArtifacts after copyModules call -- " + mergedArtifacts);
 
         if(!moduleTemplates.isEmpty()) {
             final List<Artifact> hardcodedArtifacts = new ArrayList<>(); // this one includes also the hardcoded artifact versions into module.xml
             final Path targetModules = wildflyHome.resolve(MODULES);
             for(Map.Entry<String, Map<String, Artifact>> entry : moduleTemplates.entrySet()) {
                 try {
+                    if (!mergedArtifacts.equals(entry.getValue())) {
+                        log.info("Artifact map for " + entry.getKey() + " does not equal mergedArtifacts -- " + entry.getValue());
+                    }
                     ModuleXmlVersionResolver.convertModule(moduleTemplatesDir.resolve(entry.getKey()), targetModules.resolve(entry.getKey()), entry.getValue(), hardcodedArtifacts, log);
                 } catch (Exception e) {
                     throw new MojoExecutionException("Failed to process " + moduleTemplatesDir.resolve(entry.getKey()), e);
@@ -515,6 +523,7 @@ public class FeatureSpecGeneratorInvoker {
                     }
                 }
             }
+            log.info("calling findAndCopyModules for " + fp.getFPID() + " from " + p + " using " + p.getClass());
             findAndCopyModules(p, fpArtifacts);
         }
 
@@ -632,8 +641,15 @@ public class FeatureSpecGeneratorInvoker {
                         throws IOException {
                         if (WfConstants.MODULE_XML.equals(file.getFileName().toString())) {
                             final String relativePath = source.relativize(file).toString();
-                            moduleTemplates.put(relativePath, fpArtifacts);
-                            Files.copy(file, moduleTemplatesDir.resolve(relativePath), StandardCopyOption.REPLACE_EXISTING);
+                            if (mergedArtifacts != fpArtifacts) {
+                                log.info("copyModules: " + relativePath + " uses fpArtifacts different from mergedArtifacts");
+                            } else if (moduleTemplates.containsKey(relativePath)) {
+                                log.info("copyModules: " + relativePath + " is already included in moduleTemplates with " + moduleTemplates.get(relativePath));
+                            } else if (relativePath.contains("product")) {
+                                log.info("Recording moduleTemplates data for " + relativePath);
+                            }
+                            Path copy= Files.copy(file, moduleTemplatesDir.resolve(relativePath), StandardCopyOption.REPLACE_EXISTING);
+                            moduleTemplates.put(moduleTemplatesDir.relativize(copy).toString(), fpArtifacts);
                         } else {
                             final Path target = wildflyHome.resolve(MODULES).resolve(source.relativize(file).toString());
                             Files.createDirectories(target.getParent());
